@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyChat - P2P Direct</title>
+    <style>
+        :root {
+            --bg:#f4f7fb; --surface:#fff; --surface2:#eef2f7; --text:#172033;
+            --muted:#718096; --border:#e2e8f0; --primary:#5b5ce2;
+            --primary-hover:#4b4cc9; --incoming:#fff; --outgoing:#5b5ce2;
+            --outgoing-text:#fff; --shadow:0 8px 30px rgba(15,23,42,.08);
+        }
+        body.dark {
+            --bg:#0f172a; --surface:#172033; --surface2:#202b3f; --text:#f1f5f9;
+            --muted:#94a3b8; --border:#2d3a50; --primary:#7c7ff2;
+            --primary-hover:#696ce5; --incoming:#202b3f; --outgoing:#6366f1;
+            --outgoing-text:#fff; --shadow:0 8px 30px rgba(0,0,0,.25);
+        }
+        *{box-sizing:border-box}
+        body{
+            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+            background:var(--bg);color:var(--text);margin:0;padding:0;display:flex;
+            flex-direction:column;height:100vh;transition:.25s ease;
+        }
+        header{
+            background:var(--surface);color:var(--text);padding:14px 58px 14px 16px;
+            text-align:center;font-size:20px;font-weight:800;border-bottom:1px solid var(--border);
+            box-shadow:var(--shadow);position:relative;z-index:10;
+        }
+        #theme-toggle{
+            position:absolute;right:14px;top:50%;transform:translateY(-50%);
+            width:42px;height:42px;border:1px solid var(--border);border-radius:50%;
+            background:var(--surface2);color:var(--text);cursor:pointer;font-size:19px;z-index:20;
+            display:grid;place-items:center;transition:.2s ease;
+        }
+        #theme-toggle:hover{transform:translateY(-50%) scale(1.05);background:var(--primary);color:#fff}
+        #connection-bar{background:var(--surface);padding:9px 12px;display:flex;flex-direction:column;gap:7px;border-bottom:1px solid var(--border)}
+        .connection-row{display:flex;gap:8px;align-items:center}
+        #connection-bar input{
+            padding:8px 13px;border:1px solid var(--border);border-radius:22px;outline:none;
+            flex:1;background:var(--surface2);color:var(--text);
+        }
+        #connection-bar input::placeholder,#message-input::placeholder{color:var(--muted)}
+        #connection-bar button,#send-btn{
+            background:var(--primary);color:#fff;border:none;padding:10px 17px;border-radius:22px;
+            cursor:pointer;font-weight:700;transition:.2s ease;
+        }
+        #connection-bar button:hover,#send-btn:hover{background:var(--primary-hover);transform:translateY(-1px)}
+        #my-id-display{
+            font-size:12px;color:var(--text);background:var(--surface2);padding:7px 11px;
+            border-radius:12px;font-weight:700;border:1px solid var(--border);
+        }
+        #status-text{font-size:12px;color:#dc3545;font-weight:700}
+        #chat-container{
+            flex:1;padding:12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;background:var(--bg)
+        }
+        .message-wrapper{display:flex;flex-direction:column;max-width:80%}
+        .user-wrapper{align-self:flex-end;align-items:flex-end}
+        .reply-wrapper{align-self:flex-start;align-items:flex-start}
+        .sender-name{font-size:11px;color:var(--muted);margin-bottom:4px;padding:0 5px}
+        .message-meta{
+            display:flex;
+            justify-content:flex-end;
+            align-items:center;
+            gap:6px;
+            margin-top:4px;
+            font-size:10px;
+            color:var(--muted);
+            user-select:none;
+        }
+        .message-status{
+            font-weight:800;
+            letter-spacing:.1px;
+        }
+
+        /* Message time + Seen status: keep them readable on both themes */
+        .user-message .message-meta{
+            color:rgba(255,255,255,.78);
+        }
+        .user-message .message-status{
+            color:rgba(255,255,255,.82);
+        }
+        .user-message .message-status.seen{
+            color:#ffffff !important;
+            font-weight:900;
+            text-shadow:0 1px 2px rgba(0,0,0,.22);
+        }
+        body.dark .user-message .message-meta{
+            color:rgba(255,255,255,.82);
+        }
+        body.dark .user-message .message-status.seen{
+            color:#ffffff !important;
+        }
+
+        .message{
+            padding:11px 15px;border-radius:18px;font-size:14px;line-height:1.45;word-wrap:break-word;
+            box-shadow:0 2px 8px rgba(15,23,42,.07)
+        }
+        .user-message{background:var(--outgoing);color:var(--outgoing-text);border-top-right-radius:5px}
+        .reply-message{background:var(--incoming);color:var(--text);border:1px solid var(--border);border-top-left-radius:5px}
+        #input-container{
+            display:flex;padding:10px 12px;background:var(--surface);border-top:1px solid var(--border);
+            align-items:center;gap:8px;position:sticky;bottom:0;z-index:5;
+            box-shadow:0 -5px 18px rgba(15,23,42,.08)
+        }
+        #message-input{
+            flex:1;padding:11px 15px;border:2px solid var(--primary);border-radius:24px;outline:none;
+            font-size:15px;background:var(--surface2);color:var(--text);min-width:0
+        }
+        #message-input:focus,#connection-bar input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(91,92,226,.12)}
+        #send-btn{
+            min-width:82px;padding:11px 16px;font-size:14px;
+            box-shadow:0 4px 12px rgba(91,92,226,.25)
+        }
+
+        .message-row{
+            display:flex;
+            align-items:flex-end;
+            gap:5px;
+            width:100%;
+        }
+        .user-wrapper .message-row{justify-content:flex-end}
+        .reply-action{
+            border:0;
+            background:transparent;
+            color:var(--muted);
+            cursor:pointer;
+            font-size:17px;
+            padding:5px;
+            border-radius:50%;
+            opacity:.75;
+            transition:.2s ease;
+            flex:0 0 auto;
+        }
+        .reply-action:hover{
+            background:var(--surface2);
+            color:var(--primary);
+            opacity:1;
+        }
+        .quoted-message{
+            margin-bottom:6px;
+            padding:6px 9px;
+            border-left:3px solid var(--primary);
+            border-radius:7px;
+            background:rgba(91,92,226,.09);
+            color:var(--muted);
+            font-size:11px;
+            max-width:100%;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+        }
+        .reply-preview{
+            display:none;
+            align-items:center;
+            gap:8px;
+            padding:8px 12px;
+            background:var(--surface);
+            border-top:1px solid var(--border);
+        }
+        .reply-preview.active{display:flex}
+        .reply-preview-content{
+            flex:1;
+            min-width:0;
+            border-left:3px solid var(--primary);
+            padding-left:9px;
+        }
+        .reply-preview-title{
+            color:var(--primary);
+            font-size:11px;
+            font-weight:800;
+            margin-bottom:2px;
+        }
+        .reply-preview-text{
+            color:var(--muted);
+            font-size:12px;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
+        }
+        #cancel-reply{
+            border:0;
+            background:var(--surface2);
+            color:var(--muted);
+            width:30px;
+            height:30px;
+            border-radius:50%;
+            cursor:pointer;
+            font-size:16px;
+        }
+
+        @media(max-width:600px){
+            header{font-size:18px}
+            #connection-bar{padding:8px}
+            #input-container{padding:9px 10px}
+            #chat-container{padding:9px}
+            #message-input{font-size:14px;padding:10px 14px}
+            #send-btn{min-width:74px;padding:10px 12px}
+            .message-wrapper{max-width:88%}
+            #my-id-display{max-width:72%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        }
+
+
+        /* Notification system */
+        #notification-bar{
+            display:flex;align-items:center;gap:8px;padding:7px 12px;
+            background:var(--surface);border-bottom:1px solid var(--border);
+        }
+        #notification-btn{
+            border:1px solid var(--border);background:var(--surface2);color:var(--text);
+            border-radius:18px;padding:7px 12px;cursor:pointer;font-weight:700;
+        }
+        #notification-btn.enabled{color:#fff;background:var(--primary);border-color:var(--primary)}
+        #unread-badge{
+            display:none;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+            background:#e53935;color:#fff;font-size:11px;font-weight:800;
+            align-items:center;justify-content:center;
+        }
+        #unread-badge.active{display:inline-flex}
+        .message-notification-dot{
+            width:7px;height:7px;border-radius:50%;background:#e53935;
+            display:inline-block;margin-left:3px;
+        }
+
+        /* Instagram-style reactions */
+        .reaction-picker{
+            position:fixed;z-index:99999;display:none;align-items:center;gap:2px;
+            padding:7px 9px;border:1px solid var(--border);border-radius:22px;
+            background:var(--surface);box-shadow:0 8px 24px rgba(0,0,0,.20);
+        }
+        .reaction-picker.active{display:flex}
+        .reaction-picker button{
+            border:0;background:transparent;color:var(--text);cursor:pointer;
+            font-size:20px;padding:4px 5px;border-radius:10px;line-height:1;
+        }
+        .reaction-picker button:hover{background:var(--surface2)}
+        .reaction-action{cursor:pointer}
+        .message-reaction{
+            display:inline-flex;align-items:center;margin-top:5px;padding:2px 7px;
+            border-radius:12px;background:var(--surface2);border:1px solid var(--border);
+            font-size:13px;line-height:1.2;cursor:pointer;user-select:none;
+        }
+    </style>
+    <!-- PeerJS CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <meta name="theme-color" content="#5b5ce2">
+    <meta name="description" content="MyChat - Direct peer-to-peer chat">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon-192.png">
+</head>
+<body>
+
+    <header>MyChat - P2P Direct<button id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Dark mode">🌙</button></header>
+
+    <!-- কানেকশন প্যানেল -->
+    <div id="connection-bar">
+        <div class="connection-row">
+            <span id="my-id-display">আইডি লোড হচ্ছে...</span>
+            <span id="status-text">ডিসকানেক্টেড</span>
+        </div>
+        <div class="connection-row">
+            <input type="text" id="friend-id-input" placeholder="বন্ধুর আইডি এখানে লিখুন">
+            <button onclick="connectToFriend()">Connect</button>
+        </div>
+    </div>
+
+    <div id="notification-bar">
+        <button id="notification-btn" type="button">🔔 Notifications: Off</button>
+        <span id="unread-badge" aria-label="Unread messages">0</span>
+    </div>
+
+    <div id="chat-container">
+        <div class="message-wrapper reply-wrapper">
+            <span class="sender-name">System</span>
+            <div class="message reply-message">আপনার আইডি বন্ধুকে দিন এবং বন্ধুর আইডি লিখে Connect করুন! 😊</div>
+        </div>
+    </div>
+
+    <div id="reply-preview" class="reply-preview">
+        <div class="reply-preview-content">
+            <div class="reply-preview-title">↩ Replying to message</div>
+            <div id="reply-preview-text" class="reply-preview-text"></div>
+        </div>
+        <button id="cancel-reply" onclick="cancelReply()" aria-label="Cancel reply">×</button>
+    </div>
+
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="মেসেজ লিখুন..." autocomplete="off">
+        <button id="send-btn" onclick="sendMessage()">➤ Send</button>
+    </div>
+
+    
+<script>
+    const myId = "chat_" + Math.floor(Math.random() * 90000 + 10000);
+    let peer = null;
+    let conn = null;
+    let activeReply = null;
+
+    try {
+        peer = new Peer(myId);
+    } catch (e) {
+        console.error("PeerJS initialization failed:", e);
+    }
+
+    if (peer) {
+        peer.on("open", (id) => {
+            const idBox = document.getElementById("my-id-display");
+            if (idBox) idBox.textContent = "আপনার আইডি: " + id;
+        });
+
+        peer.on("error", (err) => {
+            console.error("PeerJS error:", err);
+            const status = document.getElementById("status-text");
+            if (status) status.textContent = "Connection error ❌";
+        });
+
+        peer.on("connection", (connection) => {
+            conn = connection;
+            setupConnection();
+        });
+    }
+
+    function connectToFriend() {
+        const input = document.getElementById("friend-id-input");
+        const friendId = input ? input.value.trim() : "";
+
+        if (!friendId) {
+            alert("দয়া করে বন্ধুর সঠিক আইডি দিন!");
+            return;
+        }
+
+        if (!peer) {
+            alert("PeerJS load হয়নি। Chrome-এ page reload করে আবার চেষ্টা করুন।");
+            return;
+        }
+
+        conn = peer.connect(friendId);
+        setupConnection();
+    }
+
+    function setupConnection() {
+        if (!conn) return;
+
+        conn.on("open", () => {
+            updateStatus(true);
+            alert("সফলভাবে কানেক্ট হয়েছে!");
+        });
+
+        conn.on("data", (data) => {
+
+            if (data && typeof data === "object" && data.type === "reaction") {
+                setMessageReaction(data.messageId, data.reaction);
+                return;
+            }
+
+
+            if (data && typeof data === "object" && data.type === "seen") {
+                markAllMyMessagesSeen();
+                return;
+            }
+
+            if (data && typeof data === "object" && data.type === "message") {
+                const incomingText = data.text || "";
+                addMessage(incomingText, false, data.replyTo || null, "sent", data.messageId);
+                notifyNewMessage(incomingText);
+                notifySeen();
+                return;
+            }
+
+            // Compatibility with older MyChat versions.
+            const incomingText = String(data ?? "");
+            addMessage(incomingText, false, null);
+            notifyNewMessage(incomingText);
+            notifySeen();
+        });
+
+        conn.on("close", () => {
+            updateStatus(false);
+        });
+
+        conn.on("error", (err) => {
+            console.error("Connection error:", err);
+            updateStatus(false);
+        });
+    }
+
+    function updateStatus(isConnected) {
+        const statusText = document.getElementById("status-text");
+        if (!statusText) return;
+
+        if (isConnected) {
+            statusText.textContent = "কানেক্টেড ✅";
+            statusText.style.color = "#28a745";
+        } else {
+            statusText.textContent = "ডিসকানেক্টেড ❌";
+            statusText.style.color = "#d9534f";
+        }
+    }
+
+    function formatMessageTime(date = new Date()) {
+        return date.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit"
+        });
+    }
+
+    function createMessageId() {
+        return "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9);
+    }
+
+    let reactionTargetId = null;
+
+    function openReactionPicker(messageId, button) {
+        const picker = document.getElementById("reaction-picker");
+        if (!picker) return;
+
+        reactionTargetId = messageId;
+        const rect = button.getBoundingClientRect();
+
+        picker.style.left = Math.max(8, Math.min(window.innerWidth - 285, rect.left)) + "px";
+        picker.style.top = Math.max(8, rect.top - 52) + "px";
+        picker.classList.add("active");
+    }
+
+    function closeReactionPicker() {
+        const picker = document.getElementById("reaction-picker");
+        if (picker) picker.classList.remove("active");
+        reactionTargetId = null;
+    }
+
+    function setMessageReaction(messageId, reaction) {
+        const wrapper = document.querySelector('[data-message-id="' + messageId + '"]');
+        if (!wrapper) return;
+
+        let reactionEl = wrapper.querySelector(".message-reaction");
+        if (!reactionEl) {
+            reactionEl = document.createElement("div");
+            reactionEl.className = "message-reaction";
+
+            const bubble = wrapper.querySelector(".message");
+            if (bubble) bubble.appendChild(reactionEl);
+        }
+
+        reactionEl.textContent = reaction;
+    }
+
+    function reactToMessage(messageId, reaction) {
+        setMessageReaction(messageId, reaction);
+
+        if (conn && conn.open) {
+            try {
+                conn.send({
+                    type: "reaction",
+                    messageId: messageId,
+                    reaction: reaction
+                });
+            } catch (error) {
+                console.error("Reaction send failed:", error);
+            }
+        }
+
+        closeReactionPicker();
+    }
+
+    document.addEventListener("click", function(event) {
+        const reactionButton = event.target.closest("#reaction-picker button");
+
+        if (reactionButton) {
+            event.stopPropagation();
+            if (reactionTargetId) {
+                reactToMessage(reactionTargetId, reactionButton.dataset.reaction);
+            }
+            return;
+        }
+
+        if (!event.target.closest(".reaction-action")) {
+            closeReactionPicker();
+        }
+    });
+
+
+    // Notification system (kept separate from message sending/PeerJS logic)
+    let unreadCount = 0;
+
+    function updateUnreadBadge() {
+        const badge = document.getElementById("unread-badge");
+        if (!badge) return;
+        badge.textContent = String(unreadCount);
+        badge.classList.toggle("active", unreadCount > 0);
+    }
+
+    function playMessageSound() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            oscillator.type = "sine";
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.17);
+            oscillator.onended = () => ctx.close();
+        } catch (e) {
+            console.warn("Notification sound unavailable:", e);
+        }
+    }
+
+    async function enableNotifications() {
+        if (!("Notification" in window)) {
+            alert("এই browser-এ notification support নেই।");
+            return;
+        }
+
+        try {
+            const permission = await Notification.requestPermission();
+            updateNotificationButton(permission);
+
+            if (permission === "granted") {
+                alert("Notifications চালু হয়েছে ✅");
+            } else if (permission === "denied") {
+                alert("Notification permission বন্ধ করা আছে। Chrome settings থেকে permission Allow করুন।");
+            }
+        } catch (e) {
+            console.error("Notification permission failed:", e);
+        }
+    }
+
+    function updateNotificationButton(permission) {
+        const button = document.getElementById("notification-btn");
+        if (!button) return;
+
+        if (permission === "granted") {
+            button.textContent = "🔔 Notifications: On";
+            button.classList.add("enabled");
+        } else {
+            button.textContent = "🔔 Notifications: Off";
+            button.classList.remove("enabled");
+        }
+    }
+
+    function notifyNewMessage(text) {
+        unreadCount++;
+        updateUnreadBadge();
+        playMessageSound();
+
+        if ("Notification" in window && Notification.permission === "granted") {
+            try {
+                const notification = new Notification("MyChat", {
+                    body: "Friend: " + text,
+                    tag: "mychat-message",
+                    renotify: true
+                });
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                    unreadCount = 0;
+                    updateUnreadBadge();
+                };
+            } catch (e) {
+                console.warn("Browser notification failed:", e);
+            }
+        }
+    }
+
+    function addMessage(message, isUser, replyTo = null, status = "sent", messageId = null) {
+        const chatContainer = document.getElementById("chat-container");
+        if (!chatContainer) return null;
+
+        const id = messageId || createMessageId();
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "message-wrapper " +
+            (isUser ? "user-wrapper" : "reply-wrapper");
+        wrapper.dataset.messageId = id;
+
+        const name = document.createElement("div");
+        name.className = "sender-name";
+        name.textContent = isUser ? "You" : "Friend";
+
+        const row = document.createElement("div");
+        row.className = "message-row";
+
+        const bubble = document.createElement("div");
+        bubble.className = "message " +
+            (isUser ? "user-message" : "reply-message");
+
+        if (replyTo && replyTo.text) {
+            const quoted = document.createElement("div");
+            quoted.className = "quoted-message";
+            quoted.textContent =
+                "↩ " + (replyTo.sender || "Message") + ": " + replyTo.text;
+            bubble.appendChild(quoted);
+        }
+
+        const textNode = document.createElement("div");
+        textNode.textContent = message;
+        bubble.appendChild(textNode);
+
+        const meta = document.createElement("div");
+        meta.className = "message-meta";
+
+        const time = document.createElement("span");
+        time.className = "message-time";
+        time.textContent = formatMessageTime();
+        meta.appendChild(time);
+
+        let statusEl = null;
+        if (isUser) {
+            statusEl = document.createElement("span");
+            statusEl.className =
+                "message-status" + (status === "seen" ? " seen" : "");
+            statusEl.textContent = status === "seen" ? "Seen" : "Sent";
+            statusEl.dataset.status = status;
+            meta.appendChild(statusEl);
+        }
+
+        bubble.appendChild(meta);
+
+        const reactionButton = document.createElement("button");
+        reactionButton.type = "button";
+        reactionButton.className = "reply-action reaction-action";
+        reactionButton.textContent = "♡";
+        reactionButton.title = "React";
+        reactionButton.setAttribute("aria-label", "React");
+        reactionButton.onclick = function(event) {
+            event.stopPropagation();
+            openReactionPicker(id, reactionButton);
+        };
+
+        const replyButton = document.createElement("button");
+        replyButton.type = "button";
+        replyButton.className = "reply-action";
+        replyButton.textContent = "↩";
+        replyButton.title = "Reply";
+        replyButton.onclick = function() {
+            startReply({
+                text: message,
+                sender: isUser ? "You" : "Friend"
+            });
+        };
+
+        if (isUser) {
+            row.appendChild(reactionButton);
+            row.appendChild(replyButton);
+            row.appendChild(bubble);
+        } else {
+            row.appendChild(bubble);
+            row.appendChild(replyButton);
+            row.appendChild(reactionButton);
+        }
+
+        wrapper.appendChild(name);
+        wrapper.appendChild(row);
+        chatContainer.appendChild(wrapper);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // Double tap / double click = ❤️
+        let lastTap = 0;
+        bubble.addEventListener("touchend", function() {
+            const now = Date.now();
+            if (now - lastTap < 350) {
+                reactToMessage(id, "❤️");
+            }
+            lastTap = now;
+        });
+
+        bubble.addEventListener("dblclick", function() {
+            reactToMessage(id, "❤️");
+        });
+
+        return statusEl;
+    }
+
+    function startReply(reply) {
+        activeReply = reply;
+
+        const preview = document.getElementById("reply-preview");
+        const previewText = document.getElementById("reply-preview-text");
+
+        if (previewText) {
+            previewText.textContent =
+                (reply.sender || "Message") + ": " + reply.text;
+        }
+
+        if (preview) preview.classList.add("active");
+
+        const input = document.getElementById("message-input");
+        if (input) input.focus();
+    }
+
+    function cancelReply() {
+        activeReply = null;
+
+        const preview = document.getElementById("reply-preview");
+        if (preview) preview.classList.remove("active");
+    }
+
+    function markAllMyMessagesSeen() {
+        document.querySelectorAll(".message-status").forEach((statusEl) => {
+            statusEl.textContent = "Seen";
+            statusEl.dataset.status = "seen";
+            statusEl.classList.add("seen");
+        });
+    }
+
+    function notifySeen() {
+        if (conn && conn.open) {
+            try {
+                conn.send({ type: "seen" });
+            } catch (e) {
+                console.warn("Seen notification failed:", e);
+            }
+        }
+    }
+
+    function sendMessage() {
+        const input = document.getElementById("message-input");
+        if (!input) return;
+
+        const text = input.value.trim();
+        if (!text) return;
+
+        if (!conn || !conn.open) {
+            alert("Please connect to a friend first.");
+            return;
+        }
+
+        const messageId = createMessageId();
+
+        const payload = {
+            messageId: messageId,
+            type: "message",
+            text: text,
+            replyTo: activeReply ? {
+                text: activeReply.text,
+                sender: activeReply.sender
+            } : null
+        };
+
+        try {
+            conn.send(payload);
+            addMessage(text, true, payload.replyTo, "sent", messageId);
+            input.value = "";
+            cancelReply();
+        } catch (error) {
+            console.error("Send failed:", error);
+            alert("Message could not be sent. Please reconnect.");
+        }
+    }
+
+    // Enter = Send
+    const messageInput = document.getElementById("message-input");
+    if (messageInput) {
+        messageInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    }
+
+    // Light / Dark theme
+    function applyTheme(theme) {
+        const dark = theme === "dark";
+        document.body.classList.toggle("dark", dark);
+
+        const button = document.getElementById("theme-toggle");
+        if (button) {
+            button.textContent = dark ? "☀️" : "🌙";
+            button.title = dark ? "Light mode" : "Dark mode";
+            button.setAttribute(
+                "aria-label",
+                dark ? "Switch to light mode" : "Switch to dark mode"
+            );
+        }
+
+        try {
+            localStorage.setItem("mychat-theme", dark ? "dark" : "light");
+        } catch (e) {}
+    }
+
+    function toggleTheme() {
+        applyTheme(
+            document.body.classList.contains("dark") ? "light" : "dark"
+        );
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        let theme = "light";
+        try {
+            theme = localStorage.getItem("mychat-theme") || "light";
+        } catch (e) {}
+
+        applyTheme(theme === "dark" ? "dark" : "light");
+
+        const notificationButton = document.getElementById("notification-btn");
+        if (notificationButton) {
+            updateNotificationButton(
+                ("Notification" in window) ? Notification.permission : "unsupported"
+            );
+            notificationButton.addEventListener("click", enableNotifications);
+        }
+
+        const themeButton = document.getElementById("theme-toggle");
+        if (themeButton) {
+            themeButton.addEventListener("click", toggleTheme);
+        }
+    });
+</script>
+
+
+    <div id="reaction-picker" class="reaction-picker" aria-label="Message reactions">
+        <button type="button" data-reaction="❤️">❤️</button>
+        <button type="button" data-reaction="😂">😂</button>
+        <button type="button" data-reaction="👍">👍</button>
+        <button type="button" data-reaction="😮">😮</button>
+        <button type="button" data-reaction="😢">😢</button>
+        <button type="button" data-reaction="🔥">🔥</button>
+    </div>
+
+</body>
+</html>
